@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini 2D Physics Arena</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        h1 {
+            margin: 5px 0;
+            font-size: 24px;
+        }
+        #controls {
+            margin-bottom: 10px;
+            font-size: 14px;
+            color: #aaa;
+        }
+        canvas {
+            background-color: #222;
+            border: 4px solid #444;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Mini Physics Arena</h1>
+    <div id="controls">Player 1: WASD + Shift (Heavy) | Player 2: Arrow Keys + Space (Heavy)</div>
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Physics Constants
+        const GRAVITY = 0.3;
+        const FRICTION = 0.98;
+
+        // Static Obstacles / Platforms
+        const map = {
+            platforms: [
+                { x: 0, y: 460, width: 800, height: 40, color: '#444' }, // Floor
+                { x: 150, y: 320, width: 160, height: 20, color: '#00bcd4' }, // Left float
+                { x: 490, y: 320, width: 160, height: 20, color: '#00bcd4' }, // Right float
+                { x: 320, y: 200, width: 160, height: 20, color: '#ff9800' }  // Center high
+            ]
+        };
+
+        // Player Template
+        class Player {
+            constructor(x, y, color, controls) {
+                this.startX = x;
+                this.startY = y;
+                this.x = x;
+                this.y = y;
+                this.vx = 0;
+                this.vy = 0;
+                this.baseRadius = 16;
+                this.radius = 16;
+                this.color = color;
+                this.controls = controls;
+                
+                this.speed = 0.5;
+                this.jumpForce = 8;
+                this.isGrounded = false;
+                
+                // Heavy Mechanic (Bonk feature)
+                this.isHeavy = false;
+                this.baseMass = 1;
+                this.mass = 1;
+            }
+
+            reset() {
+                this.x = this.startX;
+                this.y = this.startY;
+                this.vx = 0;
+                this.vy = 0;
+                this.isHeavy = false;
+                this.mass = this.baseMass;
+                this.radius = this.baseRadius;
+            }
+
+            update(keys) {
+                // Heavy state activation
+                if (keys[this.controls.heavy]) {
+                    this.isHeavy = true;
+                    this.mass = 5; // Much heavier
+                    this.radius = 14; // Shrink slightly visually
+                } else {
+                    this.isHeavy = false;
+                    this.mass = this.baseMass;
+                    this.radius = this.baseRadius;
+                }
+
+                // Horizontal movement (reduced speed if heavy in mid-air)
+                let currentSpeed = this.speed;
+                if (this.isHeavy && !this.isGrounded) currentSpeed *= 0.2;
+
+                if (keys[this.controls.left]) this.vx -= currentSpeed;
+                if (keys[this.controls.right]) this.vx += currentSpeed;
+
+                // Jump
+                if (keys[this.controls.up] && this.isGrounded) {
+                    this.vy = -this.jumpForce;
+                    this.isGrounded = false;
+                }
+
+                // Apply physics
+                this.vy += GRAVITY;
+                this.vx *= FRICTION;
+                this.vy *= FRICTION;
+
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Floor boundary check / Platform Collisions handled below
+                this.isGrounded = false;
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.isHeavy ? '#555555' : this.color;
+                ctx.fill();
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = this.isHeavy ? '#111111' : '#ffffff';
+                ctx.stroke();
+                ctx.closePath();
+            }
+        }
+
+        // Initialize Players
+        const p1 = new Player(200, 100, '#ff5722', { up: 'KeyW', left: 'KeyA', right: 'KeyD', heavy: 'ShiftLeft' });
+        const p2 = new Player(600, 100, '#3f51b5', { up: 'ArrowUp', left: 'ArrowLeft', right: 'ArrowRight', heavy: 'Space' });
+        const players = [p1, p2];
+
+        // Track Keyboard Input
+        const keys = {};
+        window.addEventListener('keydown', (e) => keys[e.code] = true);
+        window.addEventListener('keyup', (e) => keys[e.code] = false);
+
+        // AABB vs Circle Collision Detection & Resolution
+        function handlePlatformCollisions(player) {
+            map.platforms.forEach(plat => {
+                // Find closest point on platform to circle center
+                let closestX = Math.max(plat.x, Math.min(player.x, plat.x + plat.width));
+                let closestY = Math.max(plat.y, Math.min(player.y, plat.y + plat.height));
+
+                // Distance between closest point and circle center
+                let distanceX = player.x - closestX;
+                let distanceY = player.y - closestY;
+                let distanceSquared = (distanceX * distanceX) + (distanceY * distanceY);
+
+                if (distanceSquared < (player.radius * player.radius)) {
+                    let distance = Math.sqrt(distanceSquared);
+                    
+                    // Prevent division by zero if perfectly overlapping
+                    if (distance === 0) return;
+
+                    let overlap = player.radius - distance;
+                    
+                    // Normal vector
+                    let nx = distanceX / distance;
+                    let ny = distanceY / distance;
+
+                    // Push player out of collision
+                    player.x += nx * overlap;
+                    player.y += ny * overlap;
+
+                    // Resolve velocities along collision normal
+                    let velAlongNormal = player.vx * nx + player.vy * ny;
+                    if (velAlongNormal < 0) {
+                        if (Math.abs(ny) > Math.abs(nx)) {
+                            if (ny < 0) { // Landing on top
+                                player.isGrounded = true;
+                                player.vy = 0;
+                            } else { // Hitting ceiling
+                                player.vy = -player.vy * 0.2;
+                            }
+                        } else { // Hitting side
+                            player.vx = -player.vx * 0.2;
+                        }
+                    }
+                }
+            });
+        }
+
+        // Circle vs Circle Collision (Elastic Collision with Mass)
+        function handlePlayerCollision(p1, p2) {
+            let dx = p2.x - p1.x;
+            let dy = p2.y - p1.y;
+            let distance = Math.sqrt(dx * dx + dy * dy);
+            let minDist = p1.radius + p2.radius;
+
+            if (distance < minDist) {
+                // Separate circles to prevent sticking
+                let overlap = minDist - distance;
+                let nx = dx / distance;
+                let ny = dy / distance;
+
+                // Push apart relative to mass
+                let totalMass = p1.mass + p2.mass;
+                p1.x -= nx * overlap * (p2.mass / totalMass);
+                p1.y -= ny * overlap * (p2.mass / totalMass);
+                p2.x += nx * overlap * (p1.mass / totalMass);
+                p2.y += ny * overlap * (p1.mass / totalMass);
+
+                // Elastic collision math
+                let kx = p1.vx - p2.vx;
+                let ky = p1.vy - p2.vy;
+                let p = 2 * (nx * kx + ny * ky) / totalMass;
+
+                // Apply impulse bounces
+                p1.vx -= p * p2.mass * nx * 1.5; // Multiplied by 1.5 for extra 'bonk' bounce
+                p1.vy -= p * p2.mass * ny * 1.5;
+                p2.vx += p * p1.mass * nx * 1.5;
+                p2.vy += p * p1.mass * ny * 1.5;
+            }
+        }
+
+        // Check if players fell off screen
+        function checkBoundaries(player) {
+            if (player.y > canvas.height + 50 || player.x < -50 || player.x > canvas.width + 50) {
+                player.reset();
+            }
+        }
+
+        // Main Game Loop
+        function loop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Platforms
+            map.platforms.forEach(plat => {
+                ctx.fillStyle = plat.color;
+                ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
+            });
+
+            // Update & Draw Players
+            players.forEach(p => {
+                p.update(keys);
+                handlePlatformCollisions(p);
+            });
+
+            // Handle player-to-player hits
+            handlePlayerCollision(p1, p2);
+
+            players.forEach(p => {
+                checkBoundaries(p);
+                p.draw();
+            });
+
+            requestAnimationFrame(loop);
+        }
+
+        loop();
+    </script>
+</body>
+</html>
