@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bonk.io Physics Accurate Clone</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        #gameContainer {
+            position: relative;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        canvas {
+            background-color: #333333;
+            display: block;
+        }
+        #ui {
+            position: absolute;
+            top: 15px;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-around;
+            font-size: 24px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            pointer-events: none;
+            user-select: none;
+        }
+        .score {
+            padding: 5px 15px;
+            border-radius: 5px;
+            background: rgba(0, 0, 0, 0.4);
+        }
+        #p1Score { color: #ff5555; }
+        #p2Score { color: #5555ff; }
+        #instructions {
+            margin-top: 15px;
+            font-size: 14px;
+            color: #aaa;
+            text-align: center;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="gameContainer">
+        <div id="ui">
+            <div id="p1Score" class="score">PLAYER 1: 0</div>
+            <div id="p2Score" class="score">PLAYER 2: 0</div>
+        </div>
+        <canvas id="gameCanvas" width="800" height="500"></canvas>
+    </div>
+
+    <div id="instructions">
+        <strong>P1 (Red):</strong> WASD to Move | Left Shift for HEAVY<br>
+        <strong>P2 (Blue):</strong> Arrow Keys to Move | Spacebar for HEAVY
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Prevent browser scrolling on Arrow Keys and Spacebar
+        window.addEventListener("keydown", function(e) {
+            if(["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].indexOf(e.code) > -1) {
+                e.preventDefault();
+            }
+        }, false);
+
+        // Game Configuration constants matching classic bonk scales
+        const GRAVITY = 0.35;
+        const AIR_RESISTANCE = 0.99;
+        const GROUND_FRICTION = 0.88;
+        const NORMAL_MASS = 1;
+        const HEAVY_MASS = 12; // 12x mass multiplier
+
+        // Key states
+        const keys = {};
+
+        window.addEventListener('keydown', e => keys[e.code] = true);
+        window.addEventListener('keyup', e => keys[e.code] = false);
+
+        // Game Map Structure
+        const platforms = [
+            { x: 150, y: 380, width: 500, height: 40, color: '#222', type: 'normal' }, // Main Arena
+            { x: 50, y: 260, width: 120, height: 20, color: '#222', type: 'normal' },  // Left Side
+            { x: 630, y: 260, width: 120, height: 20, color: '#222', type: 'normal' }   // Right Side
+        ];
+
+        // Object classes
+        class Player {
+            constructor(x, y, color, controls, id) {
+                this.startX = x;
+                this.startY = y;
+                this.x = x;
+                this.y = y;
+                this.vx = 0;
+                this.vy = 0;
+                this.radius = 16;
+                this.baseColor = color;
+                this.color = color;
+                this.controls = controls;
+                this.id = id;
+                
+                this.mass = NORMAL_MASS;
+                this.isHeavy = false;
+                this.grounded = false;
+                this.score = 0;
+
+                // Physics movement values
+                this.accel = 0.45;
+                this.jumpForce = -7.5;
+            }
+
+            update() {
+                // Determine Heavy Mode status
+                if (keys[this.controls.heavy]) {
+                    this.isHeavy = true;
+                    this.mass = HEAVY_MASS;
+                    this.color = '#777777'; // Visual indicator for heavy mode
+                } else {
+                    this.isHeavy = false;
+                    this.mass = NORMAL_MASS;
+                    this.color = this.baseColor;
+                }
+
+                // Apply movement physics (Only move horizontally if not locked in heavy state)
+                if (keys[this.controls.left]) {
+                    this.vx -= this.isHeavy ? this.accel * 0.2 : this.accel;
+                }
+                if (keys[this.controls.right]) {
+                    this.vx += this.isHeavy ? this.accel * 0.2 : this.accel;
+                }
+
+                // Jump condition (Disallowed when heavy)
+                if (keys[this.controls.up] && this.grounded && !this.isHeavy) {
+                    this.vy = this.jumpForce;
+                    this.grounded = false;
+                }
+
+                // Environment Physics Application
+                this.vy += GRAVITY;
+                this.vx *= this.grounded ? GROUND_FRICTION : AIR_RESISTANCE;
+                this.vy *= AIR_RESISTANCE;
+
+                // Move coordinates
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Map Out of Bounds logic (Death / Respawns)
+                if (this.y > canvas.height + 100 || this.x < -100 || this.x > canvas.width + 100) {
+                    this.handleDeath();
+                }
+
+                this.grounded = false; // Reset flag to evaluate next frame
+            }
+
+            handleDeath() {
+                this.x = this.startX;
+                this.y = this.startY;
+                this.vx = 0;
+                this.vy = 0;
+                
+                // Score allocation to opponent
+                if (this.id === 1) {
+                    p2.score++;
+                    document.getElementById('p2Score').innerText = `PLAYER 2: ${p2.score}`;
+                } else {
+                    p1.score++;
+                    document.getElementById('p1Score').innerText = `PLAYER 1: ${p1.score}`;
+                }
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = '#ffffff';
+                ctx.stroke();
+                ctx.closePath();
+
+                // Heavy inner shield aesthetic
+                if (this.isHeavy) {
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius - 6, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                    ctx.fill();
+                    ctx.closePath();
+                }
+            }
+        }
+
+        // Initialize players exactly inside spawning parameters
+        const p1 = new Player(250, 200, '#ff5555', { up: 'KeyW', left: 'KeyA', right: 'KeyD', heavy: 'ShiftLeft' }, 1);
+        const p2 = new Player(550, 200, '#5555ff', { up: 'ArrowUp', left: 'ArrowLeft', right: 'ArrowRight', heavy: 'Space' }, 2);
+
+        // Core Collision Functions
+        function checkPlatformCollisions(player) {
+            platforms.forEach(plat => {
+                // Find nearest vector coordinate within rectangle bounds
+                let closestX = Math.max(plat.x, Math.min(player.x, plat.x + plat.width));
+                let closestY = Math.max(plat.y, Math.min(player.y, plat.y + plat.height));
+
+                let distanceX = player.x - closestX;
+                let distanceY = player.y - closestY;
+                let distanceSquared = (distanceX * distanceX) + (distanceY * distanceY);
+
+                if (distanceSquared < (player.radius * player.radius)) {
+                    let distance = Math.sqrt(distanceSquared);
+                    let overlap = player.radius - distance;
+
+                    // Avoid division by zero bugs on exact center placement
+                    if (distance === 0) { distance = 1; distanceX = 1; }
+
+                    let nx = distanceX / distance;
+                    let ny = distanceY / distance;
+
+                    // Push player out of the platform geometry
+                    player.x += nx * overlap;
+                    player.y += ny * overlap;
+
+                    // Determine contact vector face
+                    if (Math.abs(ny) > Math.abs(nx)) {
+                        if (ny > 0) { // Top of platform collision
+                            player.vy = 0;
+                            player.grounded = true;
+                        } else { // Bottom head bump
+                            if (player.vy < 0) player.vy *= -0.2;
+                        }
+                    } else { // Side walls collision bump
+                        player.vx *= -0.3;
+                    }
+                }
+            });
+        }
+
+        function resolvePlayerCollision(p1, p2) {
+            let dx = p2.x - p1.x;
+            let dy = p2.y - p1.y;
+            let distance = Math.sqrt(dx * dx + dy * dy);
+            let minDistance = p1.radius + p2.radius;
+
+            if (distance < minDistance) {
+                // Separate circle intersections instantly
+                let overlap = minDistance - distance;
+                let nx = dx / distance;
+                let ny = dy / distance;
+
+                // Positional correction shift based on mass ratio splits
+                let totalMass = p1.mass + p2.mass;
+                p1.x -= nx * overlap * (p2.mass / totalMass);
+                p1.y -= ny * overlap * (p2.mass / totalMass);
+                p2.x += nx * overlap * (p1.mass / totalMass);
+                p2.y += ny * overlap * (p1.mass / totalMass);
+
+                // Relative velocities vector math
+                let rvx = p2.vx - p1.vx;
+                let rvy = p2.vy - p1.vy;
+                let velAlongNormal = rvx * nx + rvy * ny;
+
+                // Do not resolve if objects are already splitting apart
+                if (velAlongNormal > 0) return;
+
+                // Bounciness coefficient factor (Restitution)
+                let restitution = 0.6; 
+                let impulseScalar = -(1 + restitution) * velAlongNormal;
+                impulseScalar /= (1 / p1.mass + 1 / p2.mass);
+
+                // Apply impulses
+                let impulseX = impulseScalar * nx;
+                let impulseY = impulseScalar * ny;
+
+                p1.vx -= (1 / p1.mass) * impulseX;
+                p1.vy -= (1 / p1.mass) * impulseY;
+                p2.vx += (1 / p2.mass) * impulseX;
+                p2.vy += (1 / p2.mass) * impulseY;
+            }
+        }
+
+        // Main Rendering Loop
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 1. Draw Environment Maps
+            platforms.forEach(plat => {
+                ctx.fillStyle = plat.color;
+                ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
+            });
+
+            // 2. Compute Vectors & Physics
+            p1.update();
+            p2.update();
+
+            // 3. Evaluate Collision Matrix
+            checkPlatformCollisions(p1);
+            checkPlatformCollisions(p2);
+            resolvePlayerCollision(p1, p2);
+
+            // 4. Update Visual Positions
+            p1.draw();
+            p2.draw();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Launch Engine
+        gameLoop();
+    </script>
+</body>
+</html>
