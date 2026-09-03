@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bonk Sandbox Edition</title>
+    <style>
+        :root {
+            --bg-dark: #1e1e24;
+            --bg-panel: #2a2a35;
+            --primary: #ff4757;
+            --primary-hover: #ff6b81;
+            --accent: #2ed573;
+            --text-main: #ffffff;
+            --text-muted: #a0a0b0;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* Screen Management */
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+
+        .hidden {
+            opacity: 0;
+            pointer-events: none;
+            transform: scale(0.95);
+        }
+
+        /* UI Containers */
+        .panel {
+            background-color: var(--bg-panel);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            border: 2px solid #3a3a4a;
+            text-align: center;
+            min-width: 320px;
+        }
+
+        h1 {
+            margin-top: 0;
+            font-size: 2.5rem;
+            color: var(--primary);
+            text-shadow: 0 4px 10px rgba(255, 71, 87, 0.3);
+            letter-spacing: 2px;
+        }
+
+        h2 {
+            margin-top: 0;
+            color: var(--text-main);
+        }
+
+        /* Buttons & Inputs */
+        .btn {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 1rem;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+            margin: 8px;
+            display: inline-block;
+        }
+
+        .btn:hover {
+            background-color: var(--primary-hover);
+            transform: translateY(-2px);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-accent {
+            background-color: var(--accent);
+        }
+
+        .btn-accent:hover {
+            background-color: #26af5f;
+        }
+
+        input[type="text"] {
+            background: #15151a;
+            border: 2px solid #3a3a4a;
+            padding: 10px 15px;
+            color: white;
+            border-radius: 6px;
+            font-size: 1rem;
+            margin-bottom: 15px;
+            width: 80%;
+            text-align: center;
+        }
+
+        input[type="text"]:focus {
+            border-color: var(--primary);
+            outline: none;
+        }
+
+        /* Lobby Browser Layout */
+        .lobby-list {
+            width: 450px;
+            max-height: 250px;
+            background: #15151a;
+            border-radius: 6px;
+            margin: 15px 0;
+            overflow-y: auto;
+            border: 2px solid #3a3a4a;
+        }
+
+        .lobby-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 20px;
+            border-bottom: 1px solid #2a2a35;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .lobby-item:hover {
+            background: #20202a;
+        }
+
+        /* Room Layout */
+        .room-container {
+            display: flex;
+            gap: 20px;
+            width: 800px;
+            height: 400px;
+        }
+
+        .room-side {
+            flex: 1;
+            background: var(--bg-panel);
+            border-radius: 12px;
+            padding: 20px;
+            border: 2px solid #3a3a4a;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .player-list {
+            flex: 1;
+            background: #15151a;
+            border-radius: 6px;
+            padding: 10px;
+            overflow-y: auto;
+        }
+
+        .player-slot {
+            padding: 8px 12px;
+            margin-bottom: 6px;
+            background: #2a2a35;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* Game Arena Layout */
+        #gameCanvas {
+            background-color: #2d2d38;
+            border: 4px solid #4a4a5a;
+            border-radius: 8px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+        }
+
+        #gameUI {
+            position: absolute;
+            top: 15px;
+            font-weight: bold;
+            font-size: 1.2rem;
+            background: rgba(0,0,0,0.5);
+            padding: 8px 20px;
+            border-radius: 20px;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- SCREEN 1: MAIN MENU -->
+    <div id="screenMain" class="screen">
+        <div class="panel">
+            <h1>BONK.SANDBOX</h1>
+            <p style="color: var(--text-muted); margin-bottom: 25px;">High-Accuracy Physics Simulation</p>
+            <input type="text" id="usernameInput" value="Player" maxlength="12">
+            <br>
+            <button class="btn" onclick="showScreen('screenBrowser')">Play Sandbox</button>
+        </div>
+    </div>
+
+    <!-- SCREEN 2: LOBBY BROWSER -->
+    <div id="screenBrowser" class="screen hidden">
+        <div class="panel">
+            <h2>Lobby Browser</h2>
+            <div class="lobby-list" id="lobbyListContainer">
+                <!-- Dynamically generated custom rooms -->
+            </div>
+            <button class="btn btn-accent" onclick="createNewLobby()">Create Room</button>
+            <button class="btn" style="background:#4e4e5a;" onclick="showScreen('screenMain')">Back</button>
+        </div>
+    </div>
+
+    <!-- SCREEN 3: LOBBY ROOM -->
+    <div id="screenRoom" class="screen hidden">
+        <div class="room-container">
+            <div class="room-side">
+                <h3>Lobby Settings</h3>
+                <p style="color:var(--text-muted);">Status: <span id="lobbyStatus" style="color:var(--accent);">Host</span></p>
+                <div style="margin-top:auto;">
+                    <button class="btn btn-accent" id="startBtn" onclick="startGame()">Start Game</button>
+                    <button class="btn" style="background:#4e4e5a;" onclick="leaveLobby()">Leave</button>
+                </div>
+            </div>
+            <div class="room-side">
+                <h3>Players</h3>
+                <div class="player-list" id="playerListContainer">
+                    <!-- Dynamic Player Slots -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCREEN 4: GAME ARENA -->
+    <div id="screenGame" class="screen hidden">
+        <div id="gameUI">Score: <span id="scoreText" style="color:var(--primary);">0</span></div>
+        <canvas id="gameCanvas" width="850" height="600"></canvas>
+    </div>
+
+    <script>
+        // --- APP STATE ---
+        let currentUsername = "Player";
+        let targetLobbyId = null;
+        let isHost = false;
+        let gameActive = false;
+        let score = 0;
+
+        // --- SCREEN ROUTER ---
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
+            document.getElementById(screenId).classList.remove('hidden');
+            
+            if(screenId === 'screenBrowser') renderBrowser();
+            if(screenId === 'screenRoom') renderRoom();
+        }
+
+        // --- LOBBY SYSTEM OVERLAY (Simulated Multiplayer Context) ---
+        const dummyLobbies = [
+            { id: 1, name: "Heavy Weight Arena", host: "Alpha", players: 3, max: 8 },
+            { id: 2, name: "Bouncy Fields [No Heavy]", host: "Bouncer", players: 1, max: 4 },
+            { id: 3, name: "Super Speed Test", host: "Sonic", players: 5, max: 6 }
+        ];
+
+        function renderBrowser() {
+            currentUsername = document.getElementById('usernameInput').value.trim() || "Player";
+            const container = document.getElementById('lobbyListContainer');
+            container.innerHTML = "";
+            
+            dummyLobbies.forEach(lobby => {
+                const item = document.createElement('div');
+                item.className = 'lobby-item';
+                item.innerHTML = `
+                    <span><b>${lobby.name}</b> <small style="color:var(--text-muted);">by ${lobby.host}</small></span>
+                    <span style="color:var(--accent);">${lobby.players}/${lobby.max}</span>
+                `;
+                item.onclick = () => joinLobby(lobby.id);
+                container.appendChild(item);
+            });
+        }
+
+        function createNewLobby() {
+            isHost = true;
+            targetLobbyId = 99; 
+            showScreen('screenRoom');
+        }
+
+        function joinLobby(id) {
+            isHost = false;
+            targetLobbyId = id;
+            showScreen('screenRoom');
+        }
+
+        function leaveLobby() {
+            showScreen('screenBrowser');
+        }
+
+        function renderRoom() {
+            const statusText = document.getElementById('lobbyStatus');
+            const startBtn = document.getElementById('startBtn');
+            const pContainer = document.getElementById('playerListContainer');
+            
+            pContainer.innerHTML = "";
+            
+            if(isHost) {
+                statusText.innerText = "Host (Ready)";
+                statusText.style.color = "var(--accent)";
+                startBtn.style.display = "inline-block";
+                
+                pContainer.innerHTML += `<div class="player-slot"><span>👑 ${currentUsername}</span><small style="color:var(--accent);">Host</small></div>`;
+                pContainer.innerHTML += `<div class="player-slot"><span>🤖 Bot_Alpha</span><small style="color:var(--text-muted);">Ready</small></div>`;
+            } else {
+                statusText.innerText = "Guest (Waiting for Host)";
+                statusText.style.color = "var(--primary)";
+                startBtn.style.display = "none";
+                
+                const chosen = dummyLobbies.find(l => l.id === targetLobbyId);
+                pContainer.innerHTML += `<div class="player-slot"><span>👑 ${chosen ? chosen.host : "Host"}</span><small style="color:var(--accent);">Host</small></div>`;
+                pContainer.innerHTML += `<div class="player-slot"><span>👤 ${currentUsername}</span><small style="color:var(--accent);">Ready</small></div>`;
+            }
+        }
+
+        // --- HIGH ACCURACY PHYSICS CORE ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const keys = {};
+
+        window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+        window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+        // Simulation parameters matching typical sub-stepping 2D physics architectures
+        const PHYSICS = {
+            gravity: 0.28,
+            friction: 0.985,
+            bounce: 0.65,
+            heavyBounce: 0.15
+        };
+
+        class Entity {
+            constructor(x, y, radius, color, isBot = false) {
+                this.x = x;
+                this.y = y;
+                this.vx = 0;
+                this.vy = 0;
+                this.radius = radius;
+                this.color = color;
+                this.isBot = isBot;
+                
+                this.mass = 1;
+                this.isHeavy = false;
+                this.baseSpeed = 0.58;
+                this.score = 0;
+            }
+
+            update() {
+                // Controller inputs or automated AI
+                if (!this.isBot) {
+                    if (keys[' '] || keys['spacebar']) {
+                        this.mass = 5.5;
+                        this.isHeavy = true;
+                    } else {
+                        this.mass = 1.0;
+                        this.isHeavy = false;
+                    }
+
+                    if (keys['arrowleft'] || keys['a']) this.vx -= this.baseSpeed;
+                    if (keys['arrowright'] || keys['d']) this.vx += this.baseSpeed;
+                    if (keys['arrowup'] || keys['w']) {
+                        if (this.onGround) {
+                            this.vy = -7.8;
+                            this.onGround = false;
+                        }
+                    }
+                } else {
+                    // Primitive structural bot AI chasing player
+                    if (Math.random() < 0.15) {
+                        this.mass = Math.random() > 0.7 ? 5.5 : 1.0;
+                        this.isHeavy = this.mass > 1.0;
+                    }
+                    if (playerEntity && this.x < playerEntity.x) this.vx += 0.35;
+                    if (playerEntity && this.x > playerEntity.x) this.vx -= 0.35;
+                    if (this.onGround && Math.random() < 0.03) {
+                        this.vy = -7.5;
+                        this.onGround = false;
+                    }
+                }
+
+                // Apply external force vectors
+                this.vy += PHYSICS.gravity * this.mass;
+                this.vx *= PHYSICS.friction;
+                this.vy *= PHYSICS.friction;
+
+                this.x += this.vx;
+                this.y += this.vy;
+
+                this.onGround = false;
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.isHeavy ? '#4a5568' : this.color;
+                ctx.fill();
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = '#ffffff';
+                ctx.stroke();
+                ctx.closePath();
+
+                // Inner dynamic skin mapping detailing skin core weight
+                if (this.isHeavy) {
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius * 0.5, 0, Math.PI * 2);
+                    ctx.fillStyle = varColor('--primary');
+                    ctx.fill();
+                    ctx.closePath();
+                }
+            }
+        }
+
+        function varColor(varName) {
+            return getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+        }
+
+        // Map layout definitions
+        const obstacles = [
+            { x: 100, y: 480, w: 650, h: 40, type: 'floor' },
+            { x: 220, y: 320, w: 160, h: 20, type: 'normal' },
+            { x: 470, y: 320, w: 160, h: 20, type: 'normal' }
+        ];
+
+        let playerEntity = null;
+        let opponentEntity = null;
+
+        function startGame() {
+            showScreen('screenGame');
+            gameActive = true;
+            score = 0;
+            document.getElementById('scoreText').innerText = score;
+
+            playerEntity = new Entity(250, 200, 18, '#ff4757', false);
+            opponentEntity = new Entity(600, 200, 18, '#2ed573', true);
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function resolveCircleCollision(c1, c2) {
+            let dx = c2.x - c1.x;
+            let dy = c2.y - c1.y;
+            let distance = Math.hypot(dx, dy);
+            let minDist = c1.radius + c2.radius;
+
+            if (distance < minDist) {
+                // Normal intersection vector
+                let nx = dx / distance;
+                let ny = dy / distance;
+
+                // Separate overlapping boundaries cleanly
+                let overlap = minDist - distance;
+                c1.x -= nx * overlap * 0.5;
+                c1.y -= ny * overlap * 0.5;
+                c2.x += nx * overlap * 0.5;
+                c2.y += ny * overlap * 0.5;
+
+                // Relative velocity along path trajectory
+                let kx = c1.vx - c2.vx;
+                let ky = c1.vy - c2.vy;
+                let p = 2 * (kx * nx + ky * ny) / (c1.mass + c2.mass);
+
+                // Apply momentum delta scaling factor variations
+                let currentBounce = (c1.isHeavy || c2.isHeavy) ? PHYSICS.heavyBounce : PHYSICS.bounce;
+
+                c1.vx -= p * c2.mass * nx * (1 + currentBounce);
+                c1.vy -= p * c2.mass * ny * (1 + currentBounce);
+                c2.vx += p * c1.mass * nx * (1 + currentBounce);
+                c2.vy += p * c1.mass * ny * (1 + currentBounce);
+                
+                if(!c1.isBot || !c2.isBot) {
+                    score++;
+                    document.getElementById('scoreText').innerText = score;
+                }
+            }
+        }
+
+        function resolveAABBCollision(circle, rect) {
+            let closestX = Math.max(rect.x, Math.min(circle.x, rect.x + rect.w));
+            let closestY = Math.max(rect.y, Math.min(circle.y, rect.y + rect.h));
+
+            let distanceX = circle.x - closestX;
+            let distanceY = circle.y - closestY;
+            let distanceSquared = (distanceX * distanceX) + (distanceY * distanceY);
+
+            if (distanceSquared < (circle.radius * circle.radius)) {
+                let distance = Math.sqrt(distanceSquared);
+                
+                // Vector normalization prevent structural crash division zero
+                let nx = distance === 0 ? 0 : distanceX / distance;
+                let ny = distance === 0 ? -1 : distanceY / distance;
+                let overlap = circle.radius - distance;
+
+                circle.x += nx * overlap;
+                circle.y += ny * overlap;
+
+                // Reflect and isolate vectors
+                if (Math.abs(ny) > Math.abs(nx)) {
+                    circle.vy *= -(circle.isHeavy ? PHYSICS.heavyBounce : PHYSICS.bounce);
+                    if (ny < 0) circle.onGround = true; 
+                } else {
+                    circle.vx *= -(circle.isHeavy ? PHYSICS.heavyBounce : PHYSICS.bounce);
+                }
+            }
+        }
+
+        function gameLoop() {
+            if (!gameActive) return;
+
+            // Clear Workspace Frame
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Core Object Calculations
+            playerEntity.update();
+            opponentEntity.update();
+
+            // Collision Matrix Computations
+            resolveCircleCollision(playerEntity, opponentEntity);
+
+            obstacles.forEach(obs => {
+                resolveAABBCollision(playerEntity, obs);
+                resolveAABBCollision(opponentEntity, obs);
+            });
+
+            // Map Bounds Resolution
+            [playerEntity, opponentEntity].forEach(ent => {
+                if (ent.x - ent.radius < 0) { ent.x = ent.radius; ent.vx *= -0.5; }
+                if (ent.x + ent.radius > canvas.width) { ent.x = canvas.width - ent.radius; ent.vx *= -0.5; }
+                
+                // Ring Out / Respawn Zone Calculation
+                if (ent.y > canvas.height + 50) {
+                    ent.x = ent.isBot ? 600 : 250;
+                    ent.y = 150;
+                    ent.vx = 0;
+                    ent.vy = 0;
+                }
+            });
+
+            // Graphics Pipeline Processing
+            obstacles.forEach(obs => {
+                ctx.fillStyle = obs.type === 'floor' ? '#3a3a4a' : '#4e4e5a';
+                ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#6a6a7a';
+                ctx.strokeRect(obs.x, obs.y, obs.w, obs.h);
+            });
+
+            playerEntity.draw();
+            opponentEntity.draw();
+
+            // Return to lobby escape hatch handler
+            if (keys['escape']) {
+                gameActive = false;
+                showScreen('screenRoom');
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+    </script>
+</body>
+</html>
