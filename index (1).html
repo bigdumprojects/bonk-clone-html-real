@@ -125,44 +125,14 @@
       var script = document.createElement("script");
       script.src = loaderUrl;
       script.onload = () => {
-  createUnityInstance(canvas, config, (progress) => {
-    progressBarFull.style.width = 100 * progress + "%";
-  }).then((unityInstance) => {
-    loadingBar.style.display = "none";
-    loadingText.remove();
-
-    // === FIXED SAVE DATA PERSISTENCE SYSTEM ===
-    // 1. Mount the IndexedDB file system so Unity can see older saves
-    if (window.FS && window.FS.mkdir) {
-      try {
-        FS.mkdir('/idbfs');
-        FS.mount(IDBFS, {}, '/idbfs');
-        
-        // Synchronize from IndexedDB to the game memory on startup
-        FS.syncfs(true, function (err) {
-          if (err) console.error("Save system sync-in error:", err);
-          else console.log("Save data loaded successfully from browser!");
+        createUnityInstance(canvas, config, (progress) => {
+          progressBarFull.style.width = 100 * progress + "%";
+        }).then((unityInstance) => {
+          loadingBar.style.display = "none";
+          loadingText.remove();
+        }).catch((message) => {
         });
-      } catch (e) {
-        console.warn("Save system initialization warning:", e);
-      }
-    }
-
-    // 2. Automatically write changes to the browser storage every 5 seconds
-    setInterval(() => {
-      if (window.FS && window.FS.syncfs) {
-        FS.syncfs(false, function (err) {
-          if (err) console.error("Auto-save sync-out error:", err);
-        });
-      }
-    }, 5000);
-    // ==========================================
-
-  }).catch((message) => {
-    console.error("Unity loading error:", message);
-  });
-};
-
+      };
       document.body.appendChild(script);
     })();
     </script>
